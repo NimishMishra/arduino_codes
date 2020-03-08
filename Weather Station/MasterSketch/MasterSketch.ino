@@ -1,16 +1,17 @@
 // Initializing the Real Time Clock object using Serial Data and Serial Clock pins. rtc is the DS3231 class constructor
-
+// MOSI: Pin 51; SCL: Pin 52; MISO: Pin 50; CS: Pin 53
+#include <SD.h>
+#include <SPI.h> 
 #include <DS3231.h>
 DS3231  rtc(SDA, SCL); 
 void rtc_setup(){
     rtc.begin(); // Iniliaze the Real Time Clock object
 
     //You need to setup the clock date and time everytime the clock is inialized.
-    rtc.setDOW(SUNDAY);     
-    rtc.setTime(12, 35, 0);     
-    rtc.setDate(21, 4, 2019);   
+    rtc.setDOW(TUESDAY);     
+    rtc.setTime(5, 55, 0);     
+    rtc.setDate(3, 3, 2020);   
 }
-
 
 
 // The serial monitor print statements serve to test the arduino sketch before sending data 
@@ -55,7 +56,9 @@ MQ135 gasSensor = MQ135(ANALOGPIN);
 // MQ 7 library credits: https://github.com/swatish17/MQ7-Library
 #include "MQ7.h"
 MQ7 mq7(A4, 5);
-
+File file;
+Sd2Card card;
+int CS_PIN = 53;
 
 String HOST = "api.thingspeak.com";
 String PORT = "80";
@@ -96,44 +99,44 @@ void esp8266_setup(){
 
  void mq_7_loop(){
   float ppm = mq7.getPPM();
-  Serial.print("Carbon monoxide ");
-  Serial.print(ppm);
+  file.print("Carbon monoxide: ");
+  file.print(ppm);
   COconcentrationValue = ppm;
  }
 
  void mq135_loop(){
     float ppm = gasSensor.getPPM();
-    Serial.print("Air quality ");
-    Serial.print(ppm);
+    file.print("Air quality ");
+    file.print(ppm);
 }
 
 
 void rtc_loop(){
 
   // Serial.print() prints to the serial monitor
-  Serial.print(rtc.getDOWStr());
-  Serial.print(" ");
+  file.print(rtc.getDOWStr());
+  file.print(" ");
   
   
-  Serial.print(rtc.getDateStr());
-  Serial.print(" -- ");
+  file.print(rtc.getDateStr());
+  file.print(" -- ");
  
-  Serial.print(rtc.getTimeStr());
-  Serial.print(" Temp (RTC): ");
-  Serial.print(rtc.getTemp());
-  Serial.print(" -- ");
+  file.print(rtc.getTimeStr());
+  file.print(" Temp (RTC): ");
+  file.print(rtc.getTemp());
+  file.print(" -- ");
 
   } 
 
 void dht_loop(){
     DHT.read11(signal_pin); // reads data from pin A0
-    Serial.print("Temp(DHT11) = ");
-    Serial.print(DHT.temperature);
+    file.print("Temp(DHT11) = ");
+    file.print(DHT.temperature);
     temperatureValue = DHT.temperature;
-    Serial.print("  Humidity = ");
+    file.print("  Humidity = ");
     humidityValue = DHT.humidity;
-    Serial.print(DHT.humidity);
-    Serial.print(" % --");
+    file.print(humidityValue);
+    file.print(" % --");
  }
 
 
@@ -141,19 +144,19 @@ void dht_loop(){
  void uv_loop(){
     float mv = uv.read();
     float uv_index = uv.index(mv);
-    Serial.print("UV Voltage observed: ");
-    Serial.print(mv*0.001);
-    Serial.print("V --corresponding UV Index: ");
-    Serial.println(uv_index);
+    file.print("UV Voltage observed: ");
+    file.print(mv*0.001);
+    file.print("V --corresponding UV Index: ");
+    file.print(uv_index);
     uvindexValue = uv_index;
 }
 
 
 void air_quality_loop(){
-    Serial.print("Air Quality: ");
     float ppm = gasSensor.getPPM();
-    Serial.print(ppm);
-    Serial.print(" PPM-- ");
+    //Serial.print(ppm);
+    file.print(" PPM-- ");
+    file.print(ppm);
     airqualityValue = ppm;
 }
 void sendCommand(String command, int maxTime, char readReplay[]) {
@@ -219,8 +222,14 @@ void dust_sensor_loop(){
     float voltageMeasured = analogRead(dustPin);
     float calcVoltage = voltageMeasured * (5.0/1024.0);
     calcVoltage = (0.17 * calcVoltage) - 0.1;
-    Serial.print("-- Dust value: ");
-    Serial.print(calcVoltage);
+    //Serial.print("-- Dust value: ");
+    //Serial.print(calcVoltage);
+    file.print("-- Dust value: ");
+    file.print(calcVoltage);
+}
+
+void sdCardInitialisation(){
+  initializeSD();
 }
 
 void setup()
@@ -230,10 +239,20 @@ void setup()
   rtc_setup();
   mq_7_setup();
   //esp8266_setup();
+  sdCardInitialisation();
 }
 
 void loop()
 {
+  file = SD.open("data.txt", FILE_WRITE);
+
+  if (file)
+  {
+    Serial.println("File created successfully.");
+  } else
+  {   
+    Serial.println("Error while creating file.");
+  }
   rtc_loop();
   dht_loop();
   uv_loop(); // takes 2 seconds to return data.
@@ -241,8 +260,35 @@ void loop()
   mq_7_loop();
   //Serial.println();
   //esp8266_loop();
-  delay (2000);
   dust_sensor_loop();
-  Serial.println();
   
+}
+
+void initializeSD()
+{
+  Serial.println("Initializing SD card...");
+  pinMode(SS, OUTPUT);
+  pinMode(CS_PIN, OUTPUT);
+  digitalWrite(CS_PIN, HIGH);
+  
+  if (!card.init(SPI_HALF_SPEED, CS_PIN)) {
+    Serial.println("initialization failed. Things to check:");
+    Serial.println("* is a card inserted?");
+    Serial.println("* is your wiring correct?");
+    Serial.println("* did you change the chipSelect pin to match your shield or module?");
+    while (1);
+  } else {
+    Serial.println("Wiring is correct and a card is present.");
+    Serial.println(card.type());
+    Serial.println(SD_CARD_TYPE_SD2);
+  }
+  
+  if (SD.begin())
+  {
+    Serial.println("SD card is ready to use.");
+  } else
+  {
+    Serial.println("SD card initialization failed");
+    return;
+  }
 }
