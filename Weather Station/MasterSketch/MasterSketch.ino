@@ -9,11 +9,18 @@ void rtc_setup(){
 
     //You need to setup the clock date and time everytime the clock is inialized.
     rtc.setDOW(TUESDAY);     
-    rtc.setTime(5, 55, 0);     
-    rtc.setDate(3, 3, 2020);   
+    rtc.setTime(9, 03, 0);     
+    rtc.setDate(10, 3, 2020);   
 }
 
+char filename[] = "Weather.txt"; 
+// do not put special characters like _ (weather_data.txt). It won't work 
 
+
+
+
+
+// ********************************************************************************
 // The serial monitor print statements serve to test the arduino sketch before sending data 
 // to thingspeak.com. I have commented out all print statements for better performance
 
@@ -99,41 +106,36 @@ void esp8266_setup(){
 
  void mq_7_loop(){
   float ppm = mq7.getPPM();
-  file.print("Carbon monoxide: ");
   file.print(ppm);
+  file.print("--");
   COconcentrationValue = ppm;
  }
 
  void mq135_loop(){
     float ppm = gasSensor.getPPM();
-    file.print("Air quality ");
     file.print(ppm);
+    file.print("--");
 }
 
 
 void rtc_loop(){
 
   // Serial.print() prints to the serial monitor
-  file.print(rtc.getDOWStr());
+  file.print(rtc.getDOWStr());  
   file.print(" ");
-  
-  
   file.print(rtc.getDateStr());
-  file.print(" -- ");
- 
+  file.print(" ");
   file.print(rtc.getTimeStr());
-  file.print(" Temp (RTC): ");
+  file.print("--");
   file.print(rtc.getTemp());
-  file.print(" -- ");
-
-  } 
+  file.print("--");
+ } 
 
 void dht_loop(){
     DHT.read11(signal_pin); // reads data from pin A0
-    file.print("Temp(DHT11) = ");
     file.print(DHT.temperature);
+    file.print(" C--");
     temperatureValue = DHT.temperature;
-    file.print("  Humidity = ");
     humidityValue = DHT.humidity;
     file.print(humidityValue);
     file.print(" % --");
@@ -144,10 +146,10 @@ void dht_loop(){
  void uv_loop(){
     float mv = uv.read();
     float uv_index = uv.index(mv);
-    file.print("UV Voltage observed: ");
+    file.print("--");
     file.print(mv*0.001);
-    file.print("V --corresponding UV Index: ");
     file.print(uv_index);
+    file.print("--");
     uvindexValue = uv_index;
 }
 
@@ -155,8 +157,8 @@ void dht_loop(){
 void air_quality_loop(){
     float ppm = gasSensor.getPPM();
     //Serial.print(ppm);
-    file.print(" PPM-- ");
     file.print(ppm);
+    file.print(" PPM--");
     airqualityValue = ppm;
 }
 void sendCommand(String command, int maxTime, char readReplay[]) {
@@ -222,10 +224,8 @@ void dust_sensor_loop(){
     float voltageMeasured = analogRead(dustPin);
     float calcVoltage = voltageMeasured * (5.0/1024.0);
     calcVoltage = (0.17 * calcVoltage) - 0.1;
-    //Serial.print("-- Dust value: ");
-    //Serial.print(calcVoltage);
-    file.print("-- Dust value: ");
     file.print(calcVoltage);
+    file.print("\n");
 }
 
 void sdCardInitialisation(){
@@ -244,15 +244,28 @@ void setup()
 
 void loop()
 {
-  file = SD.open("data.txt", FILE_WRITE);
-
-  if (file)
-  {
-    Serial.println("File created successfully.");
-  } else
-  {   
-    Serial.println("Error while creating file.");
+  if(file == 0){
+    file = SD.open(filename, FILE_WRITE);
+    if (file)
+    {
+      Serial.println("File created successfully.");
+      // print header
+      file.print("Timestamp--");
+      file.print("Temp (RTC)--");
+      file.print("Temp(DHT11)--");
+      file.print("Humidity--");
+      file.print("UV Voltage--");
+      file.print("UV Index--");
+      file.print("PPM");
+      file.print("Carbon monoxide conc.--");
+      file.println("Dust value\n");
+    } else
+    {   
+      Serial.println("Error while creating file.");
+    }
   }
+
+ 
   rtc_loop();
   dht_loop();
   uv_loop(); // takes 2 seconds to return data.
@@ -261,7 +274,10 @@ void loop()
   //Serial.println();
   //esp8266_loop();
   dust_sensor_loop();
-  
+  file.flush();
+  // reading from file
+  Serial.println("Written to file");
+  delay(2000);
 }
 
 void initializeSD()
@@ -279,8 +295,6 @@ void initializeSD()
     while (1);
   } else {
     Serial.println("Wiring is correct and a card is present.");
-    Serial.println(card.type());
-    Serial.println(SD_CARD_TYPE_SD2);
   }
   
   if (SD.begin())
